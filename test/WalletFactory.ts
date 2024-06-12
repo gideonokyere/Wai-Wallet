@@ -51,9 +51,9 @@ describe("Wallet Factory",function(){
       const wallets = await walletFactory.getWallets();
       const walletAddress = wallets[0][1];
       const Wallet = await ethers.getContractAt("Wallet",`${walletAddress}`);
-      const signersCount = await Wallet.numSigners();
+      const signersCount = await Wallet.numOfSigners();
       const walletSigners = (await Wallet.getWalletSigners()).length;
-      expect(walletSigners).eql(signersCount,"Must be equal to signersCount");
+      expect(BigInt(walletSigners)).eql(signersCount,"Must be equal to signersCount");
     });
 
     it("Should failed if no signers are provided",async function(){
@@ -62,7 +62,7 @@ describe("Wallet Factory",function(){
       await expect(walletFactory.createWallet("Gift",2,signers)).revertedWith("please provide signers");
     });
 
-    it("should failed if numbers confirmation more then signers",async function(){
+    it("should failed if numbers of confirmation more then signers",async function(){
       const {owner,otherAccount,walletFactory} = await loadFixture(deployContract);
       const signers:Signers[] = [
         {name:"Akon",addr:`${owner.address}`},
