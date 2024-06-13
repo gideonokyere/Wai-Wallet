@@ -8,8 +8,10 @@ import {TransactionApproval} from "./enums/Transaction.sol";
 contract Wallet is Ownable, AccessControl {
 
   event TransactionSent(uint256 indexed _txId,address indexed _to,uint256 _amount);
-  event TransactionCreated(uint256 indexed _txId);
+  event TransactionCreated(uint256 indexed _txId,address indexed _to,uint256 _amount);
   event TransactionRejected(uint256 indexed _txId);
+  event FundsReceived(address indexed _addr, uint256 _amount);
+  event SignerAdded(address indexed _addr);
 
   string public name; // name of the wallet
   uint256 public requiredConfirmation; // number of confirmations needed to excute the transaction
@@ -38,6 +40,18 @@ contract Wallet is Ownable, AccessControl {
   }
 
 /***
+ * @notice - if you are sending funds from a contract, you should use call instead of send or transfer
+ */
+  receive() external payable {
+    if(address(this).balance > walletBalance){
+      walletBalance = address(this).balance + msg.value;
+    }else{
+      walletBalance+=msg.value;
+    }
+    emit FundsReceived(msg.sender,msg.value);
+  }
+
+/***
  * @dev this function is used to create a new transaction.
  * @notice only signers can call this function
  * @param _to the reciever of the funds
@@ -56,6 +70,7 @@ contract Wallet is Ownable, AccessControl {
       numConfirmation:0,
       excuted:false
     });
+    emit TransactionCreated(txId,_to,_amount);
     return txId;
   }
 
@@ -96,6 +111,9 @@ contract Wallet is Ownable, AccessControl {
  */
   function addSigner(string memory _name,address _addr) external onlyRole(DEFAULT_ADMIN_ROLE) returns (bool){
     //Checking if the address is already a signer
+    if(msg.sender == address(0)){
+      revert("Zero address not allowed");
+    }
     if(hasRole(SIGNER_ROLE,_addr)){
       revert("Already a signer");
     }
@@ -104,6 +122,7 @@ contract Wallet is Ownable, AccessControl {
       name: _name,
       addr: _addr
     });
+    emit SignerAdded(_addr);
     return true;
   }
 
@@ -130,7 +149,7 @@ contract Wallet is Ownable, AccessControl {
  */
   function _canExcuteTransaction(uint256 _txId, TransactionApproval _vote) internal returns (bool){
     Transaction storage trans = transactions[_txId];
-    string memory _name = _getSignerName();
+    string memory _name = _getSignerName();//get the name of the signer
     trans.numConfirmation += 1;
     SignerStatus[] storage signer = signerStatus[_txId];
 
@@ -158,6 +177,7 @@ contract Wallet is Ownable, AccessControl {
     if(trans.approved > trans.unApproved){
       return true;
     }
+    emit TransactionRejected(_txId);
     return false;
   }
 
@@ -175,6 +195,11 @@ contract Wallet is Ownable, AccessControl {
     }
   }
 
+/***
+ * @dev this function sends the funds but it depends on _hasTransactionExcuted and  _canExcuteTransaction
+ * @param _txId Transaction Id
+ * @return true or false
+ */
   function _sendFunds(uint256 _txId) internal returns (bool){
     Transaction memory trans = transactions[_txId];
     if(trans.amount > walletBalance){
@@ -185,6 +210,7 @@ contract Wallet is Ownable, AccessControl {
     if(!sent){
       revert("Transaction failed");
     }
+    emit TransactionSent(_txId,trans.to,trans.amount);
     return true;
   }
 

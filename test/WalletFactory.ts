@@ -9,7 +9,6 @@ describe("Wallet Factory",function(){
 
   async function deployContract(){
     const [owner,...otherAccount] = await ethers.getSigners();
-    console.log("********** Deployong Contracts *************");
     const WalletFactory = await ethers.getContractFactory("WalletFactory");
     const walletFactory = await WalletFactory.deploy();
     await walletFactory.waitForDeployment();
@@ -25,7 +24,7 @@ describe("Wallet Factory",function(){
     addr:string;
   }
 
-  describe("Wallet Factory Testing",async function(){
+  describe("Wallet Factory Test",async function(){
 
     it("Should be able to create new wallets",async()=>{
       const {owner,otherAccount,walletFactory} = deployObject;
