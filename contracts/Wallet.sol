@@ -17,7 +17,7 @@ contract Wallet is Ownable, AccessControl {
   uint256 public requiredConfirmation; // number of confirmations needed to excute the transaction
   uint256 public numOfSigners; // number of signers of the wallet
   uint256 public walletBalance; // balance of the wallet
-  uint256 private txId; // transaction Id
+  uint256 public txId; // transaction Id
   mapping(uint256=>Signers) public signers; // Signer name and address
   mapping(uint256=>Transaction) public transactions; // This keep tracks of transactions
   mapping(uint256=>SignerStatus[]) public signerStatus; // this record signer action on a transaction
@@ -58,8 +58,9 @@ contract Wallet is Ownable, AccessControl {
  * @param _amount amount to send
  * @return txId the Id of the transaction
  */
-  function newTransaction(address _to, uint256 _amount) external onlyRole(SIGNER_ROLE) returns (uint256) {
+  function newTransaction(address _to, uint256 _amount) external returns (uint256) {
     require(walletBalance >= _amount,"Low wallet balance");
+    require(hasRole(SIGNER_ROLE,msg.sender),"Not a signer");
     txId++;
     transactions[txId] = Transaction({
       txId:txId,
@@ -91,7 +92,8 @@ contract Wallet is Ownable, AccessControl {
  * @param _txId transaction Id
  * @param _vote enum type with YES or NO values
  */
-  function signAndExcuteTransaction(uint256 _txId, TransactionApproval _vote) external payable onlyRole(SIGNER_ROLE) returns (bool){
+  function signAndExcuteTransaction(uint256 _txId, TransactionApproval _vote) external payable returns (bool){
+    require(hasRole(SIGNER_ROLE,msg.sender),"Not a signer");
     //checking if the transaction has been excuted
     if(_hasTransactionExcuted(_txId) == true){
       revert("Transaction already excuted");
@@ -110,6 +112,7 @@ contract Wallet is Ownable, AccessControl {
  * @return true if sucess
  */
   function addSigner(string memory _name,address _addr) external onlyRole(DEFAULT_ADMIN_ROLE) returns (bool){
+    require(hasRole(DEFAULT_ADMIN_ROLE,msg.sender),"Only admin can add a signer");
     //Checking if the address is already a signer
     if(msg.sender == address(0)){
       revert("Zero address not allowed");
