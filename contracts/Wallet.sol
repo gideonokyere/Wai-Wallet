@@ -2,10 +2,12 @@
 pragma solidity 0.8.24;
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Signers,Transaction,SignerStatus} from "./structs/Wallet.sol";
 import {TransactionApproval} from "./enums/Transaction.sol";
 
-contract Wallet is Ownable, AccessControl {
+
+contract Wallet is Ownable, AccessControl, ReentrancyGuard {
 
   event TransactionSent(uint256 indexed _txId,address indexed _to,uint256 _amount);
   event TransactionCreated(uint256 indexed _txId,address indexed _to,uint256 _amount);
@@ -92,14 +94,15 @@ contract Wallet is Ownable, AccessControl {
  * @param _txId transaction Id
  * @param _vote enum type with YES or NO values
  */
-  function signAndExcuteTransaction(uint256 _txId, TransactionApproval _vote) external payable returns (bool){
+  function signAndExcuteTransaction(uint256 _txId, TransactionApproval _vote) external payable nonReentrant returns (bool){
     require(hasRole(SIGNER_ROLE,msg.sender),"Not a signer");
-    //checking if the transaction has been excuted
-    if(_hasTransactionExcuted(_txId) == true){
+    Transaction storage trans = transactions[_txId];
+     //checking if the transaction has been excuted
+    if(trans.excuted == true){
       revert("Transaction already excuted");
     }
-    if(_canExcuteTransaction(_txId,_vote) == true){
-      _sendFunds(_txId);
+    if(_canExcuteTransaction(trans,_vote) == true){
+     _sendFunds(trans);
     }
     return true;
   }
@@ -111,7 +114,7 @@ contract Wallet is Ownable, AccessControl {
  * @param _add address of the signer
  * @return true if sucess
  */
-  function addSigner(string memory _name,address _addr) external onlyRole(DEFAULT_ADMIN_ROLE) returns (bool){
+  function addSigner(string memory _name,address _addr) external returns (bool){
     require(hasRole(DEFAULT_ADMIN_ROLE,msg.sender),"Only admin can add a signer");
     //Checking if the address is already a signer
     if(msg.sender == address(0)){
@@ -150,11 +153,10 @@ contract Wallet is Ownable, AccessControl {
  * @param _vote An enum type with YES or No values
  * @return true or false which indicates if a the funds can be sent or not
  */
-  function _canExcuteTransaction(uint256 _txId, TransactionApproval _vote) internal returns (bool){
-    Transaction storage trans = transactions[_txId];
+  function _canExcuteTransaction(Transaction storage trans, TransactionApproval _vote) internal returns (bool){
     string memory _name = _getSignerName();//get the name of the signer
     trans.numConfirmation += 1;
-    SignerStatus[] storage signer = signerStatus[_txId];
+    SignerStatus[] storage signer = signerStatus[trans.txId];
 
     if(_vote == TransactionApproval.YES){
       trans.approved += 1;
@@ -163,7 +165,7 @@ contract Wallet is Ownable, AccessControl {
         addr: msg.sender,
         approved: true
       }));
-    }else if(_vote == TransactionApproval.NO){
+    }else{
       trans.unApproved +=1;
       signer.push(SignerStatus({
         name: _name,
@@ -177,25 +179,11 @@ contract Wallet is Ownable, AccessControl {
       assert(trans.excuted == true);
     }
     //Checking if approved is > unApproved
-    if(trans.approved > trans.unApproved){
+    if(trans.excuted == true && trans.approved > trans.unApproved){
       return true;
     }
-    emit TransactionRejected(_txId);
+    emit TransactionRejected(trans.txId);
     return false;
-  }
-
-/***
- * @dev this function checks if a transaction has been excuted
- * @param _txId uint256
- * @return bool
- */
-  function _hasTransactionExcuted(uint256 _txId) internal view returns (bool){
-    Transaction memory trans = transactions[_txId];
-    if(trans.excuted == true) {
-      return true;
-    }else{
-      return false;
-    }
   }
 
 /***
@@ -203,8 +191,8 @@ contract Wallet is Ownable, AccessControl {
  * @param _txId Transaction Id
  * @return true or false
  */
-  function _sendFunds(uint256 _txId) internal returns (bool){
-    Transaction memory trans = transactions[_txId];
+  function _sendFunds(Transaction memory trans) internal returns (bool){
+    //Transaction memory trans = transactions[_txId];
     if(trans.amount > walletBalance){
       revert("Wallet has a low a balance");
     }
@@ -213,7 +201,7 @@ contract Wallet is Ownable, AccessControl {
     if(!sent){
       revert("Transaction failed");
     }
-    emit TransactionSent(_txId,trans.to,trans.amount);
+    emit TransactionSent(trans.txId,trans.to,trans.amount);
     return true;
   }
 

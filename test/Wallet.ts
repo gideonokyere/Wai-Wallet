@@ -10,6 +10,11 @@ describe("Wallet",function(){
     addr:string;
   }
 
+  enum TransactionApproval {
+    YES,
+    NO
+  }
+
   //Deploying wallet contract
   async function deployWallet(){
     let [owner,...otherAccount] = await ethers.getSigners();
@@ -51,7 +56,7 @@ describe("Wallet",function(){
     
     it("Signer should be able to create a new transaction",async function(){
       const {wallet,otherAccount} = deployObject;
-      const amountToSend = ethers.parseEther("1");
+      const amountToSend = ethers.parseEther("0.5");
       await wallet.newTransaction(otherAccount[4].address,amountToSend);
       const lastTxId = await wallet.txId();
       expect(parseInt(lastTxId)).to.equal(1,"Transaction Id should be = 1");
@@ -62,6 +67,44 @@ describe("Wallet",function(){
       const amountToSend = ethers.parseEther("1");
       await expect(wallet.connect(otherAccount[3]).newTransaction(otherAccount[4].address,amountToSend)).revertedWith("Not a signer");
     });
+
+    it("Only signers should be able to sign a transaction",async function(){
+      const {wallet,otherAccount} = deployObject;
+      const txId = await wallet.txId();
+      await expect(wallet.connect(otherAccount[3]).signAndExcuteTransaction(txId,TransactionApproval.YES)).revertedWith("Not a signer");
+    });
+
+    it("All signers should be able to sign a transaction",async function(){
+      const {wallet,otherAccount} = deployObject;
+      const beforeBalance = await ethers.provider.getBalance(otherAccount[4].address);
+      //All signers approving the transaction
+      const txId = await wallet.txId();
+      await wallet.signAndExcuteTransaction(txId,TransactionApproval.YES);
+      await wallet.connect(otherAccount[1]).signAndExcuteTransaction(txId,TransactionApproval.YES);
+      const transactionStatus = await wallet.transactions(txId);
+      expect(await ethers.provider.getBalance(transactionStatus[2])).equal(transactionStatus[1] + beforeBalance);
+    });
+
+    it("Signer should not be able to sign an excuted transaction",async function(){
+      const {wallet} = deployObject;
+      const txId = await wallet.txId();
+      await expect(wallet.signAndExcuteTransaction(txId,TransactionApproval.YES)).revertedWith("Transaction already excuted");
+    });
+
+    it("Signers should be able to vote against a transaction",async function(){
+      const {wallet,otherAccount} = deployObject;
+      await wallet.newTransaction(otherAccount[6].address,ethers.parseEther("1"));
+      const beforeTx = await ethers.provider.getBalance((await wallet.getAddress()));
+      const txId = await wallet.txId();
+      await wallet.connect(otherAccount[1]).signAndExcuteTransaction(txId,TransactionApproval.NO);
+      await wallet.connect(otherAccount[2]).signAndExcuteTransaction(txId,TransactionApproval.NO);
+      expect(await ethers.provider.getBalance((await wallet.getAddress()))).equal(beforeTx,"Unmatch Balance");
+    });
+
+    it("Only admin should be able to add a signer",async function(){
+      const {wallet,otherAccount} = deployObject;
+      await expect(wallet.connect(otherAccount[1]).addSigner("test3",otherAccount[9].address)).revertedWith("Only admin can add a signer");
+    })
 
   });
 
